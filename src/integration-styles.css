@@ -125,8 +125,11 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  z-index: 2001;
+  z-index: 3001; /* Above sidebar (1500) and map controls (2000) */
   margin: 1rem;
+  /* Glass panel styles inherited from .glass-panel-dark used in component, 
+     but position needs to be managed here or inline. 
+     Since we removed inline, we keep it here. */
   /* Glass panel styles inherited from .glass-panel-dark used in component, 
      but position needs to be managed here or inline. 
      Since we removed inline, we keep it here. */
@@ -192,7 +195,9 @@ body {
   background: none;
   border: none;
   cursor: pointer;
-  padding: 0;
+  padding: 10px; /* Larger touch target */
+  position: relative;
+  z-index: 3002;
 }
 
 .hamburger-icon {
