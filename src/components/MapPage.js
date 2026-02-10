@@ -1253,6 +1253,81 @@ const getPointAtFraction = (path, fraction) => {
   return { ...path[path.length - 1], bearing: 0 };
 };
 
+// Helper to find closest point on a line segment to a specific point
+const getClosestPointOnSegment = (p1, p2, point) => {
+  const x = point.lat;
+  const y = point.lng;
+  const x1 = p1[0];
+  const y1 = p1[1];
+  const x2 = p2[0];
+  const y2 = p2[1];
+
+  const A = x - x1;
+  const B = y - y1;
+  const C = x2 - x1;
+  const D = y2 - y1;
+
+  const dot = A * C + B * D;
+  const len_sq = C * C + D * D;
+  let param = -1;
+
+  if (len_sq !== 0) {
+    param = dot / len_sq;
+  }
+
+  let xx, yy;
+
+  if (param < 0) {
+    xx = x1;
+    yy = y1;
+  } else if (param > 1) {
+    xx = x2;
+    yy = y2;
+  } else {
+    xx = x1 + param * C;
+    yy = y1 + param * D;
+  }
+
+  return [xx, yy];
+};
+
+// Helper to get remaining path from user location
+const getRemainingPath = (fullPath, userLocation) => {
+  if (!fullPath || fullPath.length < 2 || !userLocation) return fullPath;
+
+  let closestDistance = Infinity;
+  let closestIndex = 0;
+  let closestPoint = null;
+
+  // Find the segment the user is closest to
+  for (let i = 0; i < fullPath.length - 1; i++) {
+    const p1 = fullPath[i];
+    const p2 = fullPath[i + 1];
+    const point = getClosestPointOnSegment(p1, p2, userLocation);
+
+    // Calculate distance from user to this closest point
+    const dist = Math.sqrt(
+      Math.pow(point[0] - userLocation.lat, 2) +
+      Math.pow(point[1] - userLocation.lng, 2)
+    );
+
+    if (dist < closestDistance) {
+      closestDistance = dist;
+      closestIndex = i;
+      closestPoint = point;
+    }
+  }
+
+  // If we found a closest point
+  if (closestPoint) {
+    // Return path starting from closest point, then the rest of the path points
+    // closestIndex is the start of the closest segment, so we want closestPoint -> (closestIndex + 1) -> ... -> end
+    return [closestPoint, ...fullPath.slice(closestIndex + 1)];
+  }
+
+  return fullPath;
+};
+
 // Component to handle map events and disable follow mode on user interaction
 function MapEventsHandler({ setFollowMode }) {
   useMapEvents({
@@ -2982,12 +3057,19 @@ function MapPage() {
                 positions={
                   (() => {
                     const resolvedStartId = startPoint?.id === 'user-location' && route ? route[0] : startPoint?.id;
+                    let pathCoordinates = [];
                     const customPath = getCustomPath(resolvedStartId, endPoint?.id);
 
                     if (customPath) {
-                      return customPath.map(point => [point.latitude, point.longitude]);
+                      pathCoordinates = customPath.map(point => [point.latitude, point.longitude]);
+                    } else {
+                      pathCoordinates = getRouteCoordinates();
                     }
-                    return getRouteCoordinates();
+
+                    if (navigationStarted && userLocation) {
+                      return getRemainingPath(pathCoordinates, userLocation);
+                    }
+                    return pathCoordinates;
                   })()
                 }
                 pathOptions={{
@@ -3007,6 +3089,17 @@ function MapPage() {
                 if (!customPath && route.length > 0) {
                   const coords = getRouteCoordinates();
                   customPath = coords.map(c => ({ latitude: c[0], longitude: c[1] }));
+                }
+
+                if (!customPath || customPath.length < 2) return null;
+
+                // Apply path erasing to arrows if navigation is active
+                if (navigationStarted && userLocation) {
+                  // Convert to array format for helper function
+                  const pathCoords = customPath.map(p => [p.latitude, p.longitude]);
+                  const remainingCoords = getRemainingPath(pathCoords, userLocation);
+                  // Convert back to object format
+                  customPath = remainingCoords.map(c => ({ latitude: c[0], longitude: c[1] }));
                 }
 
                 if (!customPath || customPath.length < 2) return null;
