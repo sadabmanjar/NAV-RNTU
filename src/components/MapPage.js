@@ -10,7 +10,7 @@ import '../App.css'; // Global styles might need adjustment or keep using App.cs
 const BUILDINGS = [
   { id: 21, name: "Gate 1", lat: 23.13532841376455, lng: 77.56212472915651, type: "entrance", color: "#10b981", icon: "🚪" },
   // ... (rest of buildings logic is same)
-
+//hello
   { id: 22, name: "Gate 2", lat: 23.135057098030337, lng: 77.56386816501619, type: "entrance", color: "#10b981", icon: "🚪" },
   { id: 23, name: "Gate 3", lat: 23.13519522247272, lng: 77.56522536277772, type: "entrance", color: "#10b981", icon: "🚪" },
   { id: 7, name: "Football Ground", lat: 23.134677255080238, lng: 77.56299376487733, type: "sports", color: "#06b6d4", icon: "⚽" },
