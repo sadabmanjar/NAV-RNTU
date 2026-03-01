@@ -14,6 +14,9 @@ const UserDetailsForm = ({ user, onComplete }) => {
     });
     const [loading, setLoading] = useState(false);
 
+    // Google Apps Script URL (same as ContactUs.jsx)
+    const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwVfxtD_IXHmTu3gFgitjLR8564lDFVs1RrNGBgEf88gorZ0bVEXACvYYPLeVH2JgH8HQ/exec';
+
     const purposes = [
         "Student Admission",
         "Faculty Visit",
@@ -49,6 +52,28 @@ const UserDetailsForm = ({ user, onComplete }) => {
                 photoURL: user.photoURL,
                 createdAt: new Date().toISOString()
             }, { merge: true });
+
+            // ALSO save to Google Sheets
+            try {
+                const data = new URLSearchParams();
+                data.append("Type", "Login");
+                data.append("Name", formData.name);
+                data.append("Email", user.email);
+                data.append("Phone", formData.phone);
+                
+                // Combine purpose, organization, and designation into one string
+                const fullPurpose = `${formData.purpose} @ ${formData.organization} (${formData.designation || 'No Designation'})`;
+                data.append("Purpose", fullPurpose);
+
+                await fetch(GOOGLE_SCRIPT_URL, {
+                    method: 'POST',
+                    body: data,
+                    mode: 'no-cors'
+                });
+            } catch (sheetError) {
+                console.error("Failed to sync login with Google Sheets:", sheetError);
+                // We won't block the user from navigating if just the sheet sync fails
+            }
 
             onComplete(); // Navigate to main app
         } catch (error) {
