@@ -36,3 +36,4 @@ frontend/node_modules/
 .env
 build/
 dist/
+TODO.md
