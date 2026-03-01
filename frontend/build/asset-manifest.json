@@ -1,0 +1,18 @@
+{
+  "files": {
+    "main.css": "/static/css/main.80bc3bc0.css",
+    "main.js": "/static/js/main.e8d6fed3.js",
+    "static/js/453.52b70f28.chunk.js": "/static/js/453.52b70f28.chunk.js",
+    "static/media/rntu-logo.png": "/static/media/rntu-logo.a3afe1aa373197a8836e.png",
+    "static/media/rntu-logo.jpg": "/static/media/rntu-logo.156653d4455a059f78ab.jpg",
+    "static/media/gps pointer.png": "/static/media/gps pointer.5bf0fb3c8aa6d00cfd29.png",
+    "index.html": "/index.html",
+    "main.80bc3bc0.css.map": "/static/css/main.80bc3bc0.css.map",
+    "main.e8d6fed3.js.map": "/static/js/main.e8d6fed3.js.map",
+    "453.52b70f28.chunk.js.map": "/static/js/453.52b70f28.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.80bc3bc0.css",
+    "static/js/main.e8d6fed3.js"
+  ]
+}
