@@ -15,7 +15,7 @@ const UserDetailsForm = ({ user, onComplete }) => {
     const [loading, setLoading] = useState(false);
 
     // Google Apps Script URL (same as ContactUs.jsx)
-    const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwVfxtD_IXHmTu3gFgitjLR8564lDFVs1RrNGBgEf88gorZ0bVEXACvYYPLeVH2JgH8HQ/exec';
+    const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzYg-sZ-3IcpSO2rumeyQKmIbSPPvI8C56x6cLX6bAfpdwJ3qJY7dQXEPpFAK86lsffQg/exec';
 
     const purposes = [
         "Student Admission",

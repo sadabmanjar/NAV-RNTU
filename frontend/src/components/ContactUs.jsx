@@ -27,11 +27,11 @@ const ContactUs = () => {
         e.preventDefault();
         setIsSubmitting(true);
         setSubmitStatus(null);
-        
         try {
             // We use URLSearchParams to send data as application/x-www-form-urlencoded
             // This is properly parsed by Google Apps Script e.parameter
             const data = new URLSearchParams();
+            data.append("Type", "Feedback");
             data.append("Name", formData.name);
             data.append("Email", formData.email);
             data.append("Message", formData.message);
