@@ -13,7 +13,7 @@ const ContactUs = () => {
     const [submitStatus, setSubmitStatus] = useState(null); // 'success' or 'error'
 
     // Replace this string with the URL you get after deploying your Google Apps Script
-    const GOOGLE_SCRIPT_URL = 'YOUR_GOOGLE_SCRIPT_WEB_APP_URL';
+    const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwVfxtD_IXHmTu3gFgitjLR8564lDFVs1RrNGBgEf88gorZ0bVEXACvYYPLeVH2JgH8HQ/exec';
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -29,16 +29,16 @@ const ContactUs = () => {
         setSubmitStatus(null);
         
         try {
-            // We use formData to send data as application/x-www-form-urlencoded
-            // This bypasses CORS preflight issues that happen with JSON on Google Scripts
-            const formDataObj = new FormData();
-            formDataObj.append("Name", formData.name);
-            formDataObj.append("Email", formData.email);
-            formDataObj.append("Message", formData.message);
+            // We use URLSearchParams to send data as application/x-www-form-urlencoded
+            // This is properly parsed by Google Apps Script e.parameter
+            const data = new URLSearchParams();
+            data.append("Name", formData.name);
+            data.append("Email", formData.email);
+            data.append("Message", formData.message);
 
             const response = await fetch(GOOGLE_SCRIPT_URL, {
                 method: 'POST',
-                body: formDataObj,
+                body: data,
                 mode: 'no-cors' // Google Scripts often require no-cors for simple requests from browser
             });
 
