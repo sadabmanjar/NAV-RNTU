@@ -1,0 +1,10 @@
+{
+  "name": "college-navigation-root",
+  "version": "1.0.0",
+  "description": "Root package to run frontend quickly",
+  "scripts": {
+    "dev": "npm run dev --prefix frontend",
+    "install-all": "npm install --prefix frontend",
+    "build": "npm run build --prefix frontend"
+  }
+}
