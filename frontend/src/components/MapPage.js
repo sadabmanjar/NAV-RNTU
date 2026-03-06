@@ -1281,12 +1281,71 @@ function MapPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Sidebar toggle state
   const [showSuggestions, setShowSuggestions] = useState(false); // Search suggestions toggle
   const [toastMessage, setToastMessage] = useState(null);
+  // API-fetched locations (admin-managed, merged with BUILDINGS for display)
+  const [apiLocations, setApiLocations] = useState([]);
+  // Admin-managed events (merged into map + search)
+  const [mapEvents, setMapEvents] = useState([]);
   const mapRef = React.useRef(null);
 
   const showToast = (message) => {
     setToastMessage(message);
     setTimeout(() => setToastMessage(null), 4000);
   };
+
+  // Fetch admin-managed locations from the API
+  useEffect(() => {
+    const fetchApiLocations = async () => {
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/locations`);
+        const data = await res.json();
+        if (Array.isArray(data)) setApiLocations(data);
+      } catch (e) { /* silent */ }
+    };
+    fetchApiLocations();
+  }, []);
+
+  // Fetch admin-managed events from the API
+  useEffect(() => {
+    const fetchEvents = async () => {
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/events`);
+        const data = await res.json();
+        if (Array.isArray(data)) setMapEvents(data);
+      } catch (e) { /* silent */ }
+    };
+    fetchEvents();
+  }, []);
+
+  // Helper: merge BUILDINGS + API-only locations + upcoming event venues for search
+  const allLocationsForSearch = [
+    ...BUILDINGS,
+    ...apiLocations
+      .filter(loc => !BUILDINGS.some(b => b.name.toLowerCase() === loc.name.toLowerCase()))
+      .map(loc => ({
+        id: `api-${loc._id}`,
+        name: loc.name,
+        lat: loc.coordinates.latitude,
+        lng: loc.coordinates.longitude,
+        type: loc.category,
+        icon: '📍',
+        color: '#64748b',
+        isApiOnly: true,
+      })),
+    ...mapEvents
+      .filter(ev => new Date(ev.date) >= new Date(new Date().setHours(0,0,0,0)))
+      .map(ev => ({
+        id: `event-${ev._id}`,
+        name: ev.title,
+        lat: ev.coordinates.lat,
+        lng: ev.coordinates.lng,
+        type: ev.eventType || 'Event',
+        icon: '🎪',
+        color: '#f59e0b',
+        isEventMarker: true,
+        eventMeta: ev,
+      }))
+  ];
+
   // Animation loop
   useEffect(() => {
     let animationFrame;
@@ -1477,6 +1536,7 @@ function MapPage() {
   useEffect(() => {
     if (startPoint && endPoint) {
       let actualStartId = startPoint.id;
+      let actualEndId = endPoint.id;
 
       // If starting from user location, find the nearest node to route from
       if (startPoint.id === 'user-location') {
@@ -1485,20 +1545,22 @@ function MapPage() {
           return; // Wait for GPS to get coordinate
         }
         const nearest = findNearestBuilding(startPoint.lat, startPoint.lng);
-        if (nearest) {
-          actualStartId = nearest.id;
-        }
+        if (nearest) actualStartId = nearest.id;
+      }
+
+      // If ending at an event/API location, find the nearest hardcoded building to route TO
+      if (endPoint.isEventMarker || endPoint.isApiOnly) {
+        const nearest = findNearestBuilding(endPoint.lat, endPoint.lng);
+        if (nearest) actualEndId = nearest.id;
       }
 
       // Check for custom path first
-      const customPath = getCustomPath(actualStartId, endPoint.id);
+      const customPath = getCustomPath(actualStartId, actualEndId);
 
       if (customPath) {
-        // Use custom path (store just IDs for display logic, or full path if needed)
-        // We Use actualStartId so the custom path is found correctly
-        setRoute([actualStartId, endPoint.id]);
+        setRoute([actualStartId, actualEndId]);
       } else {
-        const path = pathFinder.findPath(actualStartId, endPoint.id);
+        const path = pathFinder.findPath(actualStartId, actualEndId);
         setRoute(path);
       }
     } else {
@@ -1506,16 +1568,22 @@ function MapPage() {
     }
   }, [startPoint, endPoint]);
 
-  const handleBuildingClick = (building) => {
-    if (!startPoint) {
-      setStartPoint(building);
-    } else if (!endPoint) {
-      setEndPoint(building);
+  const handleBuildingSelect = (building) => {
+    if (building.id === selectedBuilding?.id) {
+      setSelectedBuilding(null);
+      setRoute(null);
+      if (mapRef.current) {
+        mapRef.current.setView([23.1166, 77.5670], 16.5);
+      }
     } else {
-      setStartPoint(building);
-      setEndPoint(null);
+      setSelectedBuilding(building);
+      highlightBuilding(building);
+      recordLocationVisit(building.id);
+      // Ensure popup opens for markers that have markerRefs logic implemented
+      if (markerRefs.current && markerRefs.current[building.id]) {
+          markerRefs.current[building.id].openPopup();
+      }
     }
-    setSelectedBuilding(building);
   };
 
   // Dedicated function for search results (Highlight only, no route modification)
@@ -1544,6 +1612,51 @@ function MapPage() {
     b.type.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // Record a visit to the backend Analytics tracking
+  const recordLocationVisit = async (locationId) => {
+    if (!locationId || String(locationId).startsWith('evt_')) return; // Don't track custom events yet
+    try {
+      await fetch(`http://localhost:5001/api/locations/${locationId}/visit`, { method: 'POST' });
+    } catch (err) {
+      console.error('Failed to record location visit:', err);
+    }
+  };
+
+  // Record a user's search string to backend Analytics tracking
+  const recordSearchQuery = async (query) => {
+    if (!query || query.trim() === '') return;
+    try {
+      await fetch('http://localhost:5001/api/search/record', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: query.trim() })
+      });
+    } catch (err) {
+      console.error('Failed to record search query:', err);
+    }
+  };
+
+  // Extract location ID from URL if present
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const locationParam = params.get('location');
+
+    if (locationParam && allLocationsForSearch.length > 0) {
+      const targetLocation = allLocationsForSearch.find(
+        loc => loc.id.toString() === locationParam || loc.name.toLowerCase() === locationParam.toLowerCase()
+      );
+
+      if (targetLocation && !targetLocation.isApiOnly) {
+         highlightBuilding(targetLocation);
+         recordLocationVisit(targetLocation.id);
+      } else if (targetLocation && targetLocation.isApiOnly && mapRef.current) {
+         // It's a custom event, just pan to it
+         mapRef.current.setView([targetLocation.lat, targetLocation.lng], 19);
+         setSelectedBuilding(targetLocation);
+      }
+    }
+  }, [allLocationsForSearch]);
+
   const getRouteCoordinates = () => {
     if (!route || route.length === 0) return [];
 
@@ -1554,14 +1667,14 @@ function MapPage() {
     }
 
     // Iterate through each segment of the route
-    console.log("Rendering route:", route);
+
     for (let i = 0; i < route.length - 1; i++) {
       const startId = route[i];
       const endId = route[i + 1];
 
       // Check if there is a custom path between these two nodes
       const customPath = getCustomPath(startId, endId);
-      console.log(`Segment ${startId}->${endId}:`, customPath ? "Custom Path Found" : "FALLBACK TO STRAIGHT LINE");
+
 
       if (customPath) {
         // If custom path exists, add all its points
@@ -1861,11 +1974,10 @@ function MapPage() {
           border-right: 1px solid rgba(148, 163, 184, 0.1);
           display: flex;
           flex-direction: column;
-          overflow: hidden;
+          overflow-y: auto;
+          overflow-x: hidden;
           box-shadow: 20px 0 40px rgba(0, 0, 0, 0.3);
           padding-top: 80px; /* Space for hamburger menu */
-          overflow: hidden;
-          box-shadow: 20px 0 40px rgba(0, 0, 0, 0.3);
           max-height: 100vh !important;
           z-index: 1500;
           transform: translateX(-105%); /* Hidden by default */
@@ -2651,6 +2763,22 @@ function MapPage() {
                 setShowSuggestions(true);
               }}
               onFocus={() => setShowSuggestions(true)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && searchTerm.trim() !== '') {
+                  recordSearchQuery(searchTerm);
+                  const match = allLocationsForSearch.find(b => b.name.toLowerCase().includes(searchTerm.toLowerCase()));
+                  if (match) {
+                    if (match.isApiOnly) {
+                      if (mapRef.current) mapRef.current.setView([match.lat, match.lng], 19);
+                    } else {
+                      highlightBuilding(match);
+                      recordLocationVisit(match.id);
+                    }
+                    setSearchTerm(match.name);
+                    setShowSuggestions(false);
+                  }
+                }
+              }}
               // Delay hide to allow click event to fire
               onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
               className="search-input"
@@ -2667,9 +2795,16 @@ function MapPage() {
                 <button
                   className="execute-search-btn"
                   onClick={() => {
-                    const match = BUILDINGS.find(b => b.name.toLowerCase().includes(searchTerm.toLowerCase()));
+                    const match = allLocationsForSearch.find(b => b.name.toLowerCase().includes(searchTerm.toLowerCase()));
+                    recordSearchQuery(searchTerm); // Always record what the user searched, even if no match
                     if (match) {
-                      highlightBuilding(match);
+                      if (match.isApiOnly) {
+                        // Pan map to API-only location
+                        if (mapRef.current) mapRef.current.setView([match.lat, match.lng], 19);
+                      } else {
+                        highlightBuilding(match);
+                        recordLocationVisit(match.id);
+                      }
                       setSearchTerm(match.name);
                       setShowSuggestions(false);
                     }
@@ -2686,7 +2821,7 @@ function MapPage() {
             {/* Custom Search Suggestions Dropdown */}
             {showSuggestions && searchTerm && (
               <div className="search-suggestions">
-                {BUILDINGS
+                {allLocationsForSearch
                   .filter(b => b.name.toLowerCase().includes(searchTerm.toLowerCase()))
                   .map(b => (
                     <div
@@ -2694,12 +2829,18 @@ function MapPage() {
                       className="suggestion-item"
                       onClick={() => {
                         setSearchTerm(b.name);
-                        highlightBuilding(b);
+                        if (b.isApiOnly) {
+                          if (mapRef.current) mapRef.current.setView([b.lat, b.lng], 19);
+                        } else {
+                          highlightBuilding(b);
+                          recordLocationVisit(b.id);
+                        }
                         setShowSuggestions(false);
                       }}
                     >
                       <span className="suggestion-icon">{b.icon}</span>
                       <span className="suggestion-name">{b.name}</span>
+                      {b.isApiOnly && <span style={{ fontSize: '10px', color: '#94a3b8', marginLeft: '4px' }}>custom</span>}
                     </div>
                   ))}
               </div>
@@ -2729,9 +2870,9 @@ function MapPage() {
                         handleLocateMe();
                     }
                   } else {
-                    const building = BUILDINGS.find(b => b.id === parseInt(e.target.value));
-                    setStartPoint(building);
-                    setSelectedBuilding(building);
+                    const selected = allLocationsForSearch.find(b => b.id.toString() === e.target.value.toString());
+                    setStartPoint(selected || null);
+                    setSelectedBuilding(selected || null);
                   }
                 }}
                 style={{
@@ -2746,11 +2887,20 @@ function MapPage() {
               >
                 <option value="">Select start point</option>
                 <option value="user-location">📍 Your Location</option>
-                {BUILDINGS.map(building => (
-                  <option key={building.id} value={building.id}>
-                    {building.icon} {building.name}
-                  </option>
-                ))}
+                <optgroup label="Campus Buildings">
+                  {BUILDINGS.map(building => (
+                    <option key={building.id} value={building.id}>
+                      {building.icon} {building.name}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Upcoming Events">
+                  {allLocationsForSearch.filter(loc => loc.isEventMarker || loc.isApiOnly).map(loc => (
+                    <option key={loc.id} value={loc.id}>
+                      {loc.icon} {loc.name}
+                    </option>
+                  ))}
+                </optgroup>
               </select>
             </div>
 
@@ -2761,9 +2911,9 @@ function MapPage() {
               <select
                 value={endPoint?.id || ''}
                 onChange={(e) => {
-                  const building = BUILDINGS.find(b => b.id === parseInt(e.target.value));
-                  setEndPoint(building);
-                  setSelectedBuilding(building);
+                  const selected = allLocationsForSearch.find(b => b.id.toString() === e.target.value.toString());
+                  setEndPoint(selected || null);
+                  setSelectedBuilding(selected || null);
                 }}
                 style={{
                   padding: '10px 12px',
@@ -2776,11 +2926,20 @@ function MapPage() {
                 }}
               >
                 <option value="">Select end point</option>
-                {BUILDINGS.map(building => (
-                  <option key={building.id} value={building.id}>
-                    {building.icon} {building.name}
-                  </option>
-                ))}
+                <optgroup label="Campus Buildings">
+                  {BUILDINGS.map(building => (
+                    <option key={building.id} value={building.id}>
+                      {building.icon} {building.name}
+                    </option>
+                  ))}
+                </optgroup>
+                <optgroup label="Upcoming Events">
+                  {allLocationsForSearch.filter(loc => loc.isEventMarker || loc.isApiOnly).map(loc => (
+                    <option key={loc.id} value={loc.id}>
+                      {loc.icon} {loc.name}
+                    </option>
+                  ))}
+                </optgroup>
               </select>
             </div>
 
@@ -3011,6 +3170,69 @@ function MapPage() {
             </Marker>
           ))}
 
+          {/* API-only markers: admin-added locations not in hardcoded BUILDINGS */}
+          {apiLocations
+            .filter(loc => !BUILDINGS.some(b => b.name.toLowerCase() === loc.name.toLowerCase()))
+            .map(loc => (
+              <Marker
+                key={`api-${loc._id}`}
+                position={[loc.coordinates.latitude, loc.coordinates.longitude]}
+                icon={L.divIcon({
+                  html: `<div style="background:#8b5cf6;border:2px solid white;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;color:white;box-shadow:0 2px 4px rgba(0,0,0,0.4);">📍</div>`,
+                  className: 'custom-marker',
+                  iconSize: [22, 22],
+                  iconAnchor: [11, 11]
+                })}
+              >
+                <Popup>
+                  <div style={{ textAlign: 'center', padding: '2px' }}>
+                    <h3 style={{ margin: '0', fontSize: '14px', color: '#8b5cf6' }}>📍 {loc.name}</h3>
+                    <p style={{ margin: '2px 0 0', fontSize: '11px', textTransform: 'capitalize', color: '#64748b' }}>{loc.category}</p>
+                  </div>
+                </Popup>
+              </Marker>
+            ))
+          }
+
+          {/* Event venue markers — orange star pins for upcoming events */}
+          {mapEvents
+            .filter(ev => new Date(ev.date) >= new Date(new Date().setHours(0,0,0,0)))
+            .map(ev => (
+              <Marker
+                key={`event-${ev._id}`}
+                position={[ev.coordinates.lat, ev.coordinates.lng]}
+                ref={(ref) => { if (ref) markerRefs.current[`event-${ev._id}`] = ref; }}
+                icon={L.divIcon({
+                  html: `
+                    <div class="event-marker-wrapper">
+                      <div class="event-marker-pulse"></div>
+                      <div class="event-marker-pin">
+                        🎪
+                      </div>
+                    </div>
+                  `,
+                  className: 'custom-event-marker',
+                  iconSize: [40, 40],
+                  iconAnchor: [20, 40],
+                  popupAnchor: [0, -40]
+                })}
+              >
+                <Popup>
+                  <div style={{ textAlign: 'center', padding: '4px', minWidth: '140px' }}>
+                    <div style={{ fontSize: '18px', marginBottom: '4px' }}>🎪</div>
+                    <h3 style={{ margin: '0 0 4px', fontSize: '13px', color: '#d97706', fontWeight: 700 }}>{ev.title}</h3>
+                    <p style={{ margin: '2px 0', fontSize: '11px', color: '#64748b' }}>{ev.eventType || 'Event'}</p>
+                    <p style={{ margin: '2px 0', fontSize: '11px', color: '#475569' }}>
+                      📅 {new Date(ev.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                      {ev.time ? ` · ${ev.time}` : ''}
+                    </p>
+                    <p style={{ margin: '2px 0', fontSize: '11px', color: '#64748b' }}>📍 {ev.locationName}</p>
+                  </div>
+                </Popup>
+              </Marker>
+            ))
+          }
+
           {/* Route Path */}
           {route && (
             <>
@@ -3038,6 +3260,25 @@ function MapPage() {
                         weight: 4,
                         opacity: 0.8,
                         dashArray: '10, 10'
+                      }}
+                    />
+                  );
+                }
+                return null;
+              })()}
+
+              {/* Dotted Connection Line from Nearest Building to Event/API Custom Location */}
+              {(endPoint?.isEventMarker || endPoint?.isApiOnly) && route && route.length > 0 && (() => {
+                const nearest = findNearestBuilding(endPoint.lat, endPoint.lng);
+                if (nearest) {
+                  return (
+                    <Polyline
+                      positions={[[nearest.lat, nearest.lng], [endPoint.lat, endPoint.lng]]}
+                      pathOptions={{
+                        color: 'white',
+                        weight: 4,
+                        opacity: 0.8,
+                        dashArray: '5, 10'
                       }}
                     />
                   );

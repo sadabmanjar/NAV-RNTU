@@ -25,7 +25,7 @@ body {
 
 /* Glassmorphism Utility Class */
 .glass-panel {
-  background: rgba(255, 255, 255, 0.7);
+  background: var(--glass-bg);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--glass-border);
@@ -278,6 +278,10 @@ body {
     transform: translateY(-10px);
     pointer-events: none;
     transition: all 0.3s ease;
+    
+    /* Scroll fix */
+    max-height: calc(100vh - 80px);
+    overflow-y: auto;
   }
 
   .navbar-links.active {
