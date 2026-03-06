@@ -1616,7 +1616,7 @@ function MapPage() {
   const recordLocationVisit = async (locationId) => {
     if (!locationId || String(locationId).startsWith('evt_')) return; // Don't track custom events yet
     try {
-      await fetch(`http://localhost:5001/api/locations/${locationId}/visit`, { method: 'POST' });
+      await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/locations/${locationId}/visit`, { method: 'POST' });
     } catch (err) {
       console.error('Failed to record location visit:', err);
     }
@@ -1626,7 +1626,7 @@ function MapPage() {
   const recordSearchQuery = async (query) => {
     if (!query || query.trim() === '') return;
     try {
-      await fetch('http://localhost:5001/api/search/record', {
+      await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/search/record`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: query.trim() })

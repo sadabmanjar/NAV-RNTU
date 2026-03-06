@@ -38,19 +38,19 @@ const Dashboard = () => {
         usersSnapshot.forEach(doc => users.push({ id: doc.id, ...doc.data() }));
 
         // 2. Fetch Locations from MongoDB API
-        const locationsRes = await fetch('http://localhost:5001/api/locations');
+        const locationsRes = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/locations`);
         const locations = await locationsRes.json();
 
         // 3. Fetch Feedbacks from MongoDB API
         const token = localStorage.getItem('adminToken');
-        const feedbacksRes = await fetch('http://localhost:5001/api/feedback', {
+        const feedbacksRes = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/feedback`, {
             headers: { Authorization: `Bearer ${token}` }
         });
         const feedbacks = await feedbacksRes.json();
         
         // 4. Fetch Top Search Queries
         try {
-            const searchesRes = await fetch('http://localhost:5001/api/search/top');
+            const searchesRes = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/search/top`);
             if (searchesRes.ok) {
                 const searchData = await searchesRes.json();
                 setSearchInsights(searchData.length > 0 ? searchData : [{ text: 'No searches recorded yet', count: 0 }]);

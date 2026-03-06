@@ -13,7 +13,7 @@ const Feedbacks = () => {
 
   const fetchFeedbacks = async () => {
     try {
-      const response = await fetch('http://localhost:5001/api/feedback', {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/feedback`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('adminToken')}`,
         },
@@ -41,7 +41,7 @@ const Feedbacks = () => {
 
   const handleResolve = async (id) => {
     try {
-      await fetch(`http://localhost:5001/api/feedback/${id}`, {
+      await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/feedback/${id}`, {
         method: 'PATCH',
         headers: {
           Authorization: `Bearer ${localStorage.getItem('adminToken')}`,
@@ -56,7 +56,7 @@ const Feedbacks = () => {
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this feedback?')) return;
     try {
-      await fetch(`http://localhost:5001/api/feedback/${id}`, {
+      await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5001'}/api/feedback/${id}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${localStorage.getItem('adminToken')}`,
